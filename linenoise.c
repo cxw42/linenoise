@@ -175,10 +175,10 @@ enum KEY_ACTION{
 static void linenoiseAtExit(void);
 int linenoiseHistoryAdd(const char *line);
 static void refreshLine(struct linenoiseState *l);
-static void clearLinesExceptFirst(struct linenoiseState *l);
+static void movePastRows(struct linenoiseState *l);
 
 /* Debugging macro. */
-#if 0
+#ifdef LNDEBUG
 FILE *lndebug_fp = NULL;
 #define lndebug(...) \
     do { \
@@ -785,38 +785,40 @@ static void refreshMultiLine(struct linenoiseState *l) {
     abFree(&ab);
 }
 
-/* Multi line special-purpose line clear, for Ctrl-C.
+/* Move to the row after the current input line.
  *
- * clear all lines except the first, so that there won't be any left-over
- * text after the first line.
- * Extracted from refreshMultiLine. */
-static void clearLinesExceptFirst(struct linenoiseState *l) {
+ * Used for Ctrl-C handling.  Modified from refreshMultiLine. */
+static void movePastRows(struct linenoiseState *l) {
     char seq[64];
     int plen = strlen(l->prompt);
     int rows = (plen+l->len+l->cols-1)/l->cols; /* rows used by current buf. */
     int rpos = (plen+l->oldpos+l->cols)/l->cols; /* cursor relative row. */
-    int old_rows = l->maxrows;
-    int fd = l->ofd, j;
+    int fd = l->ofd;
     struct abuf ab;
+#ifdef LNDEBUG
+    int old_rows=-99999;    /* unused, but required for lndebug */
+#endif
 
     /* Update maxrows if needed. */
     if (rows > (int)l->maxrows) l->maxrows = rows;
 
-    /* First step: clear all the lines used before. To do so start by
-     * going to the last row. */
+    /* Go to the row after the last row. */
+    lndebug("movepastrows rows:%d rpos:%d", rows, rpos);
     abInit(&ab);
-    if (old_rows-rpos > 0) {
-    lndebug("go down %d", old_rows-rpos);
-    snprintf(seq,64,"\x1b[%dB", old_rows-rpos);
-    abAppend(&ab,seq,strlen(seq));
+    ++rows;     /* Now it points to the row we want to end on. */
+    if (rows-rpos > 0) {
+        lndebug("go down %d", rows-rpos);
+        snprintf(seq,64,"\x1b[%dB", rows-rpos);
+        abAppend(&ab,seq,strlen(seq));
     }
 
-    /* Now for every row except the first, clear it and go up. */
-    for (j = 0; j < old_rows-1; j++) {
-    lndebug("clear+up");
-    snprintf(seq,64,"\r\x1b[0K\x1b[1A");
+    /* As far as I can tell, we do not need to manually clear the row
+     * we landed on. */
+    /*
+    lndebug("clear");
+    snprintf(seq,64,"\r\x1b[0K");
     abAppend(&ab,seq,strlen(seq));
-    }
+    */
 
     if (write(fd,ab.b,ab.len) == -1) {} /* Can't recover from write error. */
     abFree(&ab);
@@ -1065,7 +1067,7 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, 
             return (int)l.len;
         case CTRL_C:     /* ctrl-c */
             if(mlmode) {    /* make room for the next line to follow */
-                clearLinesExceptFirst(&l);
+                movePastRows(&l);
             }
             errno = EAGAIN;
             return -1;
