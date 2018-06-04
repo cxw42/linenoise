@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <errno.h>
 #include "linenoise.h"
 
 #define UTF8
@@ -83,11 +84,21 @@ int main(int argc, char **argv) {
      *
      * The typed string is returned as a malloc() allocated string by
      * linenoise, so the user needs to free() it. */
+    printf("/quit to exit; /historylen <n> to change history length\n");
+    while(1) {
 #ifdef UTF8
-    while((line = linenoise("\033[32mこんにちは\x1b[0m> ")) != NULL) {
+        line = linenoise("\033[32mこんにちは\x1b[0m> ");
 #else
-    while((line = linenoise("\033[32mhello\x1b[0m> ")) != NULL) {
+        line = linenoise("\033[32mhello\x1b[0m> ");
 #endif
+
+        if( (line==NULL) && (errno == EAGAIN) ) {   /* Ctrl-C */
+            continue;
+        }
+        if(line==NULL) {                            /* Ctrl-D or EOF */
+            break;
+        }
+
         /* Do something with the string. */
         if (line[0] != '\0' && line[0] != '/') {
             printf("echo: '%s'\n", line);
@@ -97,6 +108,8 @@ int main(int argc, char **argv) {
             /* The "/historylen" command will change the history len. */
             int len = atoi(line+11);
             linenoiseHistorySetMaxLen(len);
+        } else if (!strncmp(line,"/quit",5)) {
+            break;
         } else if (line[0] == '/') {
             printf("Unrecognized command: %s\n", line);
         }

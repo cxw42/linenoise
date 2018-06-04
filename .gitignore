@@ -5,3 +5,6 @@ linenoise_example
 *.o
 example
 history.txt
+*.exe
+*.stackdump
+core
