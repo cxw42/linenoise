@@ -175,6 +175,7 @@ enum KEY_ACTION{
 static void linenoiseAtExit(void);
 int linenoiseHistoryAdd(const char *line);
 static void refreshLine(struct linenoiseState *l);
+static void clearLinesExceptFirst(struct linenoiseState *l);
 
 /* Debugging macro. */
 #if 0
@@ -784,6 +785,43 @@ static void refreshMultiLine(struct linenoiseState *l) {
     abFree(&ab);
 }
 
+/* Multi line special-purpose line clear, for Ctrl-C.
+ *
+ * clear all lines except the first, so that there won't be any left-over
+ * text after the first line.
+ * Extracted from refreshMultiLine. */
+static void clearLinesExceptFirst(struct linenoiseState *l) {
+    char seq[64];
+    int plen = strlen(l->prompt);
+    int rows = (plen+l->len+l->cols-1)/l->cols; /* rows used by current buf. */
+    int rpos = (plen+l->oldpos+l->cols)/l->cols; /* cursor relative row. */
+    int old_rows = l->maxrows;
+    int fd = l->ofd, j;
+    struct abuf ab;
+
+    /* Update maxrows if needed. */
+    if (rows > (int)l->maxrows) l->maxrows = rows;
+
+    /* First step: clear all the lines used before. To do so start by
+     * going to the last row. */
+    abInit(&ab);
+    if (old_rows-rpos > 0) {
+    lndebug("go down %d", old_rows-rpos);
+    snprintf(seq,64,"\x1b[%dB", old_rows-rpos);
+    abAppend(&ab,seq,strlen(seq));
+    }
+
+    /* Now for every row except the first, clear it and go up. */
+    for (j = 0; j < old_rows-1; j++) {
+    lndebug("clear+up");
+    snprintf(seq,64,"\r\x1b[0K\x1b[1A");
+    abAppend(&ab,seq,strlen(seq));
+    }
+
+    if (write(fd,ab.b,ab.len) == -1) {} /* Can't recover from write error. */
+    abFree(&ab);
+}
+
 /* Calls the two low level functions refreshSingleLine() or
  * refreshMultiLine() according to the selected mode. */
 static void refreshLine(struct linenoiseState *l) {
@@ -1026,6 +1064,9 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, 
             }
             return (int)l.len;
         case CTRL_C:     /* ctrl-c */
+            if(mlmode) {    /* make room for the next line to follow */
+                clearLinesExceptFirst(&l);
+            }
             errno = EAGAIN;
             return -1;
         case BACKSPACE:   /* backspace */
@@ -1039,6 +1080,7 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, 
             } else {
                 history_len--;
                 free(history[history_len]);
+                errno = 0;  /* no error */
                 return -1;
             }
             break;
@@ -1138,7 +1180,11 @@ static int linenoiseEdit(int stdin_fd, int stdout_fd, char *buf, size_t buflen, 
             }
             break;
         default:
-            if (linenoiseEditInsert(&l,cbuf,nread)) return -1;
+            if (linenoiseEditInsert(&l,cbuf,nread)) {
+                /* errno was set by the write() call in linenoiseEditInsert(),
+                 * so don't change it. */
+                return -1;
+            }
             break;
         case CTRL_U: /* Ctrl+u, delete the whole line. */
             buf[0] = '\0';
