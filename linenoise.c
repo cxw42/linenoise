@@ -790,25 +790,27 @@ static void refreshMultiLine(struct linenoiseState *l) {
  * Used for Ctrl-C handling.  Modified from refreshMultiLine. */
 static void movePastRows(struct linenoiseState *l) {
     char seq[64];
-    int plen = strlen(l->prompt);
-    int rows = (plen+l->len+l->cols-1)/l->cols; /* rows used by current buf. */
-    int rpos = (plen+l->oldpos+l->cols)/l->cols; /* cursor relative row. */
-    int fd = l->ofd;
+    size_t pcollen = promptTextColumnLen(l->prompt,strlen(l->prompt));
+    int colpos = columnPosForMultiLine(l->buf, l->len, l->len, l->cols, pcollen);
+    int colpos2; /* cursor column position. */
+    int rows = (pcollen+colpos+l->cols-1)/l->cols; /* rows used by current buf. */
+    int rpos = (pcollen+l->oldcolpos+l->cols)/l->cols; /* cursor relative row. */
+    int rpos2; /* rpos after refresh. */
+    int col; /* column position, zero-based. */
+    int old_rows = l->maxrows;
+    int fd = l->ofd, j;
     struct abuf ab;
-#ifdef LNDEBUG
-    int old_rows=-99999;    /* unused, but required for lndebug */
-#endif
 
     /* Update maxrows if needed. */
     if (rows > (int)l->maxrows) l->maxrows = rows;
 
     /* Go to the row after the last row. */
-    lndebug("movepastrows rows:%d rpos:%d", rows, rpos);
+    lndebug("movepastrows rows:%d old_rows:%d rpos:%d", rows, old_rows, rpos);
     abInit(&ab);
-    ++rows;     /* Now it points to the row we want to end on. */
-    if (rows-rpos > 0) {
-        lndebug("go down %d", rows-rpos);
-        snprintf(seq,64,"\x1b[%dB", rows-rpos);
+    ++old_rows;     /* Now it points to the row we want to end on. */
+    if (old_rows-rpos > 0) {
+        lndebug("go down %d", old_rows-rpos);
+        snprintf(seq,64,"\x1b[%dB", old_rows-rpos);
         abAppend(&ab,seq,strlen(seq));
     }
 

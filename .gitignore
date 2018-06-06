@@ -1,10 +1,15 @@
+# Files we generate
+utf8cct.h
+
+# Files we don't need committed
 *~
 linenoise_example
 *.a
 *.dSYM
 *.o
 example
-history.txt
+*.txt
 *.exe
 *.stackdump
 core
+gmon.out

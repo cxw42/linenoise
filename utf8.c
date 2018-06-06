@@ -44,6 +44,14 @@
 #include <unistd.h>
 #include <stdio.h>
 
+#ifdef UTF8CCT
+/* gperf output */
+#include "utf8cct.h"
+static const char *nibbles="0123456789ABCDEF";  /* nibble to hex char */
+    /* all uppercase to match combiningCharTable */
+
+#endif /* UTF8CCT */
+
 #define UNUSED(x) (void)(x)
 
 /* ============================ UTF8 utilities ============================== */
@@ -157,7 +165,7 @@ static unsigned long wideCharTable[][2] = {
 
 static size_t wideCharTableSize = sizeof(wideCharTable) / sizeof(wideCharTable[0]);
 
-static unsigned long combiningCharTable[] = {
+static unsigned long combiningCharTable[] = {   /* all uppercase */
     0x0300,0x0301,0x0302,0x0303,0x0304,0x0305,0x0306,0x0307,
     0x0308,0x0309,0x030A,0x030B,0x030C,0x030D,0x030E,0x030F,
     0x0310,0x0311,0x0312,0x0313,0x0314,0x0315,0x0316,0x0317,
@@ -372,11 +380,15 @@ static unsigned long combiningCharTable[] = {
     0xE01EC,0xE01ED,0xE01EE,0xE01EF,
 };
 
+#ifndef UTF8CCT
 static unsigned long combiningCharTableSize = sizeof(combiningCharTable) / sizeof(combiningCharTable[0]);
+#endif /* !UTF8CCT */
 
 /* Check if the code is a wide character
  */
 static int isWideChar(unsigned long cp) {
+    if(cp < wideCharTable[0][0]) return 0;  /* fast bail for Latin text */
+
     size_t i;
     for (i = 0; i < wideCharTableSize; i++)
         if (wideCharTable[i][0] <= cp && cp <= wideCharTable[i][1]) return 1;
@@ -386,10 +398,27 @@ static int isWideChar(unsigned long cp) {
 /* Check if the code is a combining character
  */
 static int isCombiningChar(unsigned long cp) {
+
+    if(cp < combiningCharTable[0]) return 0;    /* fast bail for Latin text */
+
+#ifdef UTF8CCT
+    /* Hash lookup of the hex string without leading zeros */
+
+    char buf[16], *dest = buf;
+    size_t len;
+    for(len=0; cp>0 && len<sizeof(buf); ++len, cp>>=4) {
+        *dest++ = nibbles[cp & 0x0f];
+    }
+    *dest='\0';
+    return (in_word_set(buf,len)!=0);
+
+#else
+    /* Linear search for the numeric value */
     size_t i;
     for (i = 0; i < combiningCharTableSize; i++)
         if (combiningCharTable[i] == cp) return 1;
     return 0;
+#endif /* UTF8CCT */
 }
 
 /* Get length of previous UTF8 character
