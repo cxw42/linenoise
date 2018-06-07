@@ -43,6 +43,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include "utf8.h"
 
 #define UNUSED(x) (void)(x)
 

@@ -36,7 +36,7 @@ char *hints(const char *buf, int *color, int *bold) {
     if (!strcasecmp(buf,"こんにちは")) {
         *color = 35;
         *bold = 0;
-        return " 世界";
+        return (char *)" 世界";
     }
     return NULL;
 }
