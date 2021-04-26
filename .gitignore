@@ -5,3 +5,9 @@ linenoise_example
 *.o
 example
 history.txt
+
+*.lo
+*.la
+.dirstamp
+.deps/
+.libs/
